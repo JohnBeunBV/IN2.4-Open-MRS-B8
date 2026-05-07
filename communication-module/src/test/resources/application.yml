@@ -1,0 +1,40 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+  rabbitmq:
+    host: localhost
+  cloud:
+    vault:
+      enabled: false
+  config:
+    import: ""
+
+app:
+  providers:
+    base-url: http://localhost:9999
+    swiftsend:
+      api-key: test-key
+    securepost:
+      username: test
+      password: test
+    legacylink:
+      username: test
+      password: test
+    asyncflow:
+      api-key: test-key
+  fhir:
+    callback-base-url: http://localhost:8080
+    callback-path: /fhir/webhook
+  security:
+    webhook-token: test-token
+
+logging:
+  level:
+    nl.avans: DEBUG
