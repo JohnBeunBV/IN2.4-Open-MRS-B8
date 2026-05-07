@@ -78,6 +78,7 @@ class SwiftSendAdapterTest {
             "Please arrive 10 minutes early.",
             "en",
             "Europe/Amsterdam"
+            0
         );
     }
 }

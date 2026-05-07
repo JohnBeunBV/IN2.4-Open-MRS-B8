@@ -24,9 +24,6 @@ public class NotificationService {
     private final OrganisationConfigRepository organisationRepository;
     private final NotificationProducer producer;
 
-    /**
-     * Called by the scheduler to dispatch all overdue 24h notifications.
-     */
     @Transactional
     public void dispatchDue24hNotifications() {
         List<AppointmentNotification> due = notificationRepository.findDue24hNotifications(Instant.now());
@@ -34,9 +31,6 @@ public class NotificationService {
         due.forEach(n -> dispatch(n, "REMINDER_24H"));
     }
 
-    /**
-     * Called by the scheduler to dispatch all overdue 1h notifications.
-     */
     @Transactional
     public void dispatchDue1hNotifications() {
         List<AppointmentNotification> due = notificationRepository.findDue1hNotifications(Instant.now());
@@ -45,20 +39,21 @@ public class NotificationService {
     }
 
     private void dispatch(AppointmentNotification notification, String type) {
-        OrganisationConfig org = organisationRepository.findById(notification.getOrganisationId())
-                .orElse(null);
+        OrganisationConfig org = organisationRepository.findById(notification.getOrganisationId()).orElse(null);
 
         if (org == null || !org.isActive()) {
-            log.warn("Organisation {} not found or inactive, skipping notification {}", 
-                     notification.getOrganisationId(), notification.getId());
+            log.warn("Organisation {} not found or inactive, skipping notification {}",
+                    notification.getOrganisationId(), notification.getId());
             return;
         }
 
-        // Guard: don't send for appointments already started
         if (notification.getAppointmentStart().isBefore(Instant.now())) {
             log.info("Appointment {} already started, skipping notification", notification.getFhirAppointmentId());
-            if ("REMINDER_24H".equals(type)) notification.setSent24h(true);
-            else notification.setSent1h(true);
+            if ("REMINDER_24H".equals(type)) {
+                notification.setSent24h(true);
+            } else {
+                notification.setSent1h(true);
+            }
             updateStatus(notification);
             notificationRepository.save(notification);
             return;
@@ -75,7 +70,8 @@ public class NotificationService {
                 notification.getAppointmentStart(),
                 notification.getAppointmentInstructions(),
                 org.getLanguage(),
-                org.getTimezone()
+                org.getTimezone(),
+                0
         );
 
         producer.publish(message);
@@ -83,7 +79,10 @@ public class NotificationService {
     }
 
     private void updateStatus(AppointmentNotification n) {
-        if (n.isSent24h() && n.isSent1h()) n.setStatus(NotificationStatus.COMPLETED);
-        else if (n.isSent24h()) n.setStatus(NotificationStatus.PARTIAL);
+        if (n.isSent24h() && n.isSent1h()) {
+            n.setStatus(NotificationStatus.COMPLETED);
+        } else if (n.isSent24h()) {
+            n.setStatus(NotificationStatus.PARTIAL);
+        }
     }
 }
