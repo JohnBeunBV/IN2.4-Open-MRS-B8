@@ -1,7 +1,7 @@
 server:
   port: 8080
   ssl:
-    enabled: false   # Enable in production with cert+key
+    enabled: false # Enable in production with cert+key
 
 spring:
   application:
@@ -37,7 +37,7 @@ spring:
       kv:
         enabled: true
         default-context: communicatiemodule
-      fail-fast: false   # Don't crash if Vault is unavailable in dev
+      fail-fast: false # Don't crash if Vault is unavailable in dev
 
   # Disable Vault config import if running without Vault
   config:
@@ -65,7 +65,7 @@ app:
       max-poll-attempts: 10
 
   scheduling:
-    poll-interval-ms: 30000   # Check for due notifications every 30s
+    poll-interval-ms: 30000 # Check for due notifications every 30s
     timezone-default: UTC
 
   fhir:
