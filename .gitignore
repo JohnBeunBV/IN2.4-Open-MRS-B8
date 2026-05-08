@@ -11,6 +11,8 @@ out/
 *.ipr
 *.iws
 .idea/
+.vs/
+.vscode/
 .classpath
 .project
 .settings/
