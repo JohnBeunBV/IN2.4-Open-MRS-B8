@@ -1,7 +1,7 @@
 server:
   port: 8080
   ssl:
-    enabled: false   # Enable in production with cert+key
+    enabled: false # Enable in production with cert+key
 
 spring:
   application:
@@ -37,7 +37,7 @@ spring:
       kv:
         enabled: true
         default-context: communicatiemodule
-      fail-fast: false   # Don't crash if Vault is unavailable in dev
+      fail-fast: false # Don't crash if Vault is unavailable in dev
 
   # Disable Vault config import if running without Vault
   config:
@@ -46,26 +46,26 @@ spring:
 # ─── Application-specific settings ─────────────────────────────────────────
 app:
   providers:
-    base-url: http://localhost:1337
+    base-url: http://comm-fakecomworld:8080
     swiftsend:
       path: /swiftsend
-      api-key: ${SWIFTSEND_API_KEY:dev-key-swiftsend}
+      api-key: your-api-key-here
     securepost:
       path: /securepost
-      username: ${SECUREPOST_USERNAME:dev-user}
-      password: ${SECUREPOST_PASSWORD:dev-pass}
+      username: securepost-client-id
+      password: securepost-secret-key
     legacylink:
       path: /legacylink
-      username: ${LEGACYLINK_USERNAME:dev-user}
-      password: ${LEGACYLINK_PASSWORD:dev-pass}
+      username: legacylink-user
+      password: legacylink-password
     asyncflow:
       path: /asyncflow
-      api-key: ${ASYNCFLOW_API_KEY:dev-key-asyncflow}
-      poll-interval-ms: 3000
-      max-poll-attempts: 10
+      api-key: asyncflow-api-key
+      poll-interval-ms: 5000
+      max-poll-attempts: 12
 
   scheduling:
-    poll-interval-ms: 30000   # Check for due notifications every 30s
+    poll-interval-ms: 30000 # Check for due notifications every 30s
     timezone-default: UTC
 
   fhir:
