@@ -8,8 +8,6 @@ import nl.avans.communicatiemodule.messaging.NotificationMessage;
 import nl.avans.communicatiemodule.provider.MessageTextBuilder;
 import nl.avans.communicatiemodule.provider.MessagingProvider;
 import nl.avans.communicatiemodule.provider.SendResult;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -18,20 +16,18 @@ import java.util.Base64;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * LegacyLink: Legacy SOAP API with HTTP Basic authentication.
- * Constructs a SOAP 1.1 envelope and POSTs it to the service endpoint.
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class LegacyLinkAdapter implements MessagingProvider {
 
+    private static final String STUDENT_GROUP = "groep-8";
+    private static final String NAMESPACE     = "http://legacylink.fakecomworld.com/v1";
+    private static final Pattern REF_PATTERN  =
+            Pattern.compile("<MessageReference>([^<]+)</MessageReference>", Pattern.CASE_INSENSITIVE);
+
     private final WebClient webClient;
     private final ProviderProperties properties;
-
-    private static final Pattern MESSAGE_ID_PATTERN =
-            Pattern.compile("<messageId>([^<]+)</messageId>", Pattern.CASE_INSENSITIVE);
 
     @Override
     public ProviderType getProviderType() {
@@ -41,67 +37,61 @@ public class LegacyLinkAdapter implements MessagingProvider {
     @Override
     public SendResult send(NotificationMessage message) {
         ProviderProperties.LegacyLinkProps cfg = properties.getLegacylink();
-        String baseUrl = properties.getBaseUrl() + cfg.getPath();
+        String url         = properties.getBaseUrl() + cfg.getPath() + "/SendSms";
         String credentials = Base64.getEncoder().encodeToString(
                 (cfg.getUsername() + ":" + cfg.getPassword()).getBytes(StandardCharsets.UTF_8));
 
-        String soapBody = buildSoapEnvelope(message.getRecipientPhone(), MessageTextBuilder.build(message));
+        // SMS max 160 tekens
+        String text = MessageTextBuilder.build(message);
+        if (text.length() > 160) text = text.substring(0, 157) + "...";
 
-        log.debug("LegacyLink: SOAP POST to={}", message.getRecipientPhone());
+        String xml = buildXml(message.getRecipientPhone(), text);
+
+        log.debug("LegacyLink: POST {} to={}", url, message.getRecipientPhone());
 
         try {
             String response = webClient.post()
-                    .uri(baseUrl + "/SendMessage")
-                    .header(HttpHeaders.AUTHORIZATION, "Basic " + credentials)
-                    .header(HttpHeaders.CONTENT_TYPE, "text/xml; charset=UTF-8")
-                    .header("SOAPAction", "\"SendMessage\"")
-                    .bodyValue(soapBody)
+                    .uri(url)
+                    .header("Authorization", "Basic " + credentials)
+                    .header("X-STUDENT-GROUP", STUDENT_GROUP)
+                    .header("Content-Type", "application/xml")
+                    .header("Accept", "application/xml")
+                    .bodyValue(xml)
                     .retrieve()
                     .bodyToMono(String.class)
                     .block();
 
             if (response == null) {
-                return SendResult.failure("LegacyLink returned empty SOAP response");
+                return SendResult.failure("LegacyLink: lege response");
             }
 
-            // Check for SOAP Fault
-            if (response.contains("<faultcode>") || response.contains(":Fault>")) {
-                log.error("LegacyLink SOAP Fault: {}", response);
-                return SendResult.failure("SOAP Fault received", response);
+            if (response.contains("<StatusCode>401") || response.contains("<StatusCode>400")
+                    || response.contains("<StatusCode>500")) {
+                log.error("LegacyLink fout: {}", response);
+                return SendResult.failure("LegacyLink fout in response", response);
             }
 
-            // Extract messageId from response
-            Matcher matcher = MESSAGE_ID_PATTERN.matcher(response);
-            String msgId = matcher.find() ? matcher.group(1) : "unknown";
+            Matcher matcher = REF_PATTERN.matcher(response);
+            String ref = matcher.find() ? matcher.group(1) : "unknown";
 
-            log.info("LegacyLink: message sent, messageId={}", msgId);
-            return SendResult.success(msgId, response);
+            log.info("LegacyLink: SMS verstuurd, ref={}", ref);
+            return SendResult.success(ref, response);
 
         } catch (Exception ex) {
-            log.error("LegacyLink send failed: {}", ex.getMessage());
+            log.error("LegacyLink send mislukt: {}", ex.getMessage());
             return SendResult.failure(ex.getMessage());
         }
     }
 
-    private String buildSoapEnvelope(String to, String messageText) {
-        // Escape XML special characters in the message body
-        String escapedTo   = escapeXml(to);
-        String escapedBody = escapeXml(messageText);
-
+    private String buildXml(String phone, String text) {
         return """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <soapenv:Envelope
-                xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                xmlns:msg="http://legacylink.example.com/messaging">
-              <soapenv:Header/>
-              <soapenv:Body>
-                <msg:SendMessage>
-                  <msg:recipient>%s</msg:recipient>
-                  <msg:message>%s</msg:message>
-                </msg:SendMessage>
-              </soapenv:Body>
-            </soapenv:Envelope>
-            """.formatted(escapedTo, escapedBody);
+            <?xml version="1.0" encoding="utf-8"?>
+            <SendSmsRequest xmlns="%s">
+              <PhoneNumber>%s</PhoneNumber>
+              <MessageText>%s</MessageText>
+              <SenderIdentification>OpenMRS</SenderIdentification>
+            </SendSmsRequest>
+            """.formatted(NAMESPACE, escapeXml(phone), escapeXml(text));
     }
 
     private String escapeXml(String input) {

@@ -14,17 +14,12 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import java.time.Duration;
-
-/**
- * AsyncFlow: Asynchronous provider.
- * Step 1: POST /asyncflow/submit       → returns { jobId }
- * Step 2: GET  /asyncflow/status/{id}  → poll until "DELIVERED" or "FAILED"
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class AsyncFlowAdapter implements MessagingProvider {
+
+    private static final String STUDENT_GROUP = "groep-8";
 
     private final WebClient webClient;
     private final ProviderProperties properties;
@@ -37,20 +32,23 @@ public class AsyncFlowAdapter implements MessagingProvider {
     @Override
     public SendResult send(NotificationMessage message) {
         ProviderProperties.AsyncFlowProps cfg = properties.getAsyncflow();
-        String baseUrl = properties.getBaseUrl() + cfg.getPath();
-        String apiKey  = cfg.getApiKey();
+        String url    = properties.getBaseUrl() + cfg.getPath();
+        String apiKey = cfg.getApiKey();
 
-        log.debug("AsyncFlow: submitting message to={}", message.getRecipientPhone());
+        log.debug("AsyncFlow: POST {} to={}", url, message.getRecipientPhone());
 
         try {
-            // Step 1: Submit
+            // Stap 1: submit
             SubmitRequest request = new SubmitRequest(
                     message.getRecipientPhone(),
-                    MessageTextBuilder.build(message));
+                    MessageTextBuilder.build(message),
+                    "normal"
+            );
 
             SubmitResponse submitResp = webClient.post()
-                    .uri(baseUrl + "/submit")
+                    .uri(url)
                     .header("X-API-KEY", apiKey)
+                    .header("X-STUDENT-GROUP", STUDENT_GROUP)
                     .header("Content-Type", "application/json")
                     .bodyValue(request)
                     .retrieve()
@@ -60,67 +58,77 @@ public class AsyncFlowAdapter implements MessagingProvider {
                     .bodyToMono(SubmitResponse.class)
                     .block();
 
-            if (submitResp == null || submitResp.getJobId() == null) {
-                return SendResult.failure("AsyncFlow returned no jobId");
+            if (submitResp == null || submitResp.getTrackingId() == null) {
+                return SendResult.failure("AsyncFlow: geen trackingId ontvangen");
             }
 
-            String jobId = submitResp.getJobId();
-            log.info("AsyncFlow: submitted, jobId={}", jobId);
+            String trackingId = submitResp.getTrackingId();
+            log.info("AsyncFlow: ingediend, trackingId={}", trackingId);
 
-            // Step 2: Poll
-            return pollForResult(baseUrl, apiKey, jobId, cfg);
+            // Stap 2: poll status
+            return pollStatus(url, apiKey, trackingId, cfg);
 
         } catch (Exception ex) {
-            log.error("AsyncFlow send failed: {}", ex.getMessage());
+            log.error("AsyncFlow send mislukt: {}", ex.getMessage());
             return SendResult.failure(ex.getMessage());
         }
     }
 
-    private SendResult pollForResult(String baseUrl, String apiKey, String jobId,
-                                     ProviderProperties.AsyncFlowProps cfg) throws InterruptedException {
-        for (int attempt = 0; attempt < cfg.getMaxPollAttempts(); attempt++) {
+    private SendResult pollStatus(String url, String apiKey, String trackingId,
+                                  ProviderProperties.AsyncFlowProps cfg) throws InterruptedException {
+        for (int i = 0; i < cfg.getMaxPollAttempts(); i++) {
             Thread.sleep(cfg.getPollIntervalMs());
 
             StatusResponse status = webClient.get()
-                    .uri(baseUrl + "/status/" + jobId)
+                    .uri(url + "/" + trackingId)
                     .header("X-API-KEY", apiKey)
+                    .header("X-STUDENT-GROUP", STUDENT_GROUP)
                     .retrieve()
                     .bodyToMono(StatusResponse.class)
                     .block();
 
             if (status == null) continue;
 
-            log.debug("AsyncFlow: poll {}/{} jobId={} status={}",
-                      attempt + 1, cfg.getMaxPollAttempts(), jobId, status.getStatus());
+            log.debug("AsyncFlow poll {}/{} trackingId={} status={}",
+                      i + 1, cfg.getMaxPollAttempts(), trackingId, status.getStatus());
 
-            switch (status.getStatus() == null ? "" : status.getStatus().toUpperCase()) {
-                case "DELIVERED", "SENT", "SUCCESS" ->  {
-                    log.info("AsyncFlow: jobId={} delivered", jobId);
-                    return SendResult.success(jobId, status.toString());
+            switch (status.getStatus() == null ? "" : status.getStatus()) {
+                case "Completed" -> {
+                    log.info("AsyncFlow: trackingId={} afgeleverd", trackingId);
+                    return SendResult.success(trackingId, status.toString());
                 }
-                case "FAILED", "ERROR" -> {
-                    return SendResult.failure("AsyncFlow reported FAILED for jobId=" + jobId, status.toString());
+                case "Failed" -> {
+                    return SendResult.failure(
+                            "AsyncFlow: Failed voor trackingId=" + trackingId
+                            + " - " + status.getErrorDetails(),
+                            status.toString());
                 }
-                // PENDING / QUEUED → keep polling
+                // Queued / Processing → blijven pollen
             }
         }
-        return SendResult.failure("AsyncFlow: polling timed out for jobId=" + jobId);
+        return SendResult.failure("AsyncFlow: polling timeout voor trackingId=" + trackingId);
     }
 
-    // ── Inner DTOs ──────────────────────────────────────────────────────────
+    // ── DTOs ──────────────────────────────────────────────────────────────
 
     @Data static class SubmitRequest {
-        private final String to;
-        private final String message;
+        private final String destination;
+        private final String content;
+        private final String priority;
     }
 
     @Data static class SubmitResponse {
-        @JsonProperty("job_id") private String jobId;
+        private boolean accepted;
+        @JsonProperty("trackingId") private String trackingId;
+        private String message;
+        private String submittedAt;
     }
 
     @Data static class StatusResponse {
-        @JsonProperty("job_id") private String jobId;
+        @JsonProperty("trackingId")    private String trackingId;
         private String status;
-        private String detail;
+        private String submittedAt;
+        private String processedAt;
+        @JsonProperty("errorDetails") private String errorDetails;
     }
 }

@@ -14,16 +14,14 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import java.util.Map;
+import java.util.List;
 
-/**
- * SwiftSend: Traditional REST API, authenticated via X-API-KEY header.
- * POST {baseUrl}/swiftsend/messages
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class SwiftSendAdapter implements MessagingProvider {
+
+    private static final String STUDENT_GROUP = "groep-8";
 
     private final WebClient webClient;
     private final ProviderProperties properties;
@@ -35,18 +33,23 @@ public class SwiftSendAdapter implements MessagingProvider {
 
     @Override
     public SendResult send(NotificationMessage message) {
-        String baseUrl = properties.getBaseUrl() + properties.getSwiftsend().getPath();
-        String apiKey  = properties.getSwiftsend().getApiKey();
-        String body    = MessageTextBuilder.build(message);
+        String url    = properties.getBaseUrl() + properties.getSwiftsend().getPath();
+        String apiKey = properties.getSwiftsend().getApiKey();
+        String body   = MessageTextBuilder.build(message);
 
-        SendRequest request = new SendRequest(message.getRecipientPhone(), body);
+        SendRequest request = new SendRequest(
+                "SMS",
+                List.of(message.getRecipientPhone()),
+                body
+        );
 
-        log.debug("SwiftSend: POST {}/messages to={}", baseUrl, message.getRecipientPhone());
+        log.debug("SwiftSend: POST {} to={}", url, message.getRecipientPhone());
 
         try {
             SendResponse response = webClient.post()
-                    .uri(baseUrl + "/messages")
+                    .uri(url)
                     .header("X-API-KEY", apiKey)
+                    .header("X-STUDENT-GROUP", STUDENT_GROUP)
                     .header("Content-Type", "application/json")
                     .bodyValue(request)
                     .retrieve()
@@ -57,28 +60,29 @@ public class SwiftSendAdapter implements MessagingProvider {
                     .block();
 
             if (response != null && response.getMessageId() != null) {
-                log.info("SwiftSend: message sent, messageId={}", response.getMessageId());
+                log.info("SwiftSend: sent messageId={}", response.getMessageId());
                 return SendResult.success(response.getMessageId(), response.toString());
             }
-            return SendResult.failure("SwiftSend returned empty response");
+            return SendResult.failure("SwiftSend: lege response");
         } catch (Exception ex) {
-            log.error("SwiftSend send failed: {}", ex.getMessage());
+            log.error("SwiftSend send mislukt: {}", ex.getMessage());
             return SendResult.failure(ex.getMessage());
         }
     }
 
-    // ── Inner DTOs ──────────────────────────────────────────────────────────
-
     @Data
     static class SendRequest {
-        private final String to;
-        private final String message;
+        private final String type;
+        private final List<String> recipients;
+        private final String content;
     }
 
     @Data
     static class SendResponse {
-        @JsonProperty("message_id")
+        private boolean success;
+        @JsonProperty("messageId")
         private String messageId;
-        private String status;
+        private List<String> failedRecipients;
+        private String error;
     }
 }
