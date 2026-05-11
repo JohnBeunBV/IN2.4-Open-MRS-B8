@@ -42,11 +42,12 @@ public class SecurePostAdapter implements MessagingProvider {
         try {
             String token = getOrRefreshToken(baseUrl);
 
+            // ✅ Fix: opslaan in variabele
             SendRequest request = new SendRequest(
                     "SMS",
                     message.getRecipientPhone(),
                     body,
-                    null
+                    "Afspraakherinnering"
             );
 
             SendResponse response = webClient.post()
@@ -71,8 +72,9 @@ public class SecurePostAdapter implements MessagingProvider {
                 return SendResult.success(response.getTrackingId(), response.toString());
             }
             return SendResult.failure("SecurePost: lege response");
+
         } catch (Exception ex) {
-            log.error("SecurePost send mislukt: {}", ex.getMessage());
+            log.error("SecurePost send mislukt voor {}: {}", message.getRecipientPhone(), ex.getMessage());
             return SendResult.failure(ex.getMessage());
         }
     }
@@ -101,7 +103,6 @@ public class SecurePostAdapter implements MessagingProvider {
             throw new RuntimeException("SecurePost: kon geen JWT token ophalen");
         }
 
-        // Token is 3 minuten geldig, cache voor 2.5 minuten
         long ttl = resp.getExpiresIn() > 0 ? resp.getExpiresIn() - 30 : 150;
         tokenCache.set(new CachedToken(resp.getAccessToken(), Instant.now().plusSeconds(ttl)));
         return resp.getAccessToken();

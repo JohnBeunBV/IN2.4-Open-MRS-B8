@@ -81,6 +81,7 @@ services:
   # ═══════════════════════════════════════════════════════
  
   communicatiemodule:
+  
     build: ./communication-module
     container_name: communicatiemodule
     ports:
@@ -100,6 +101,12 @@ services:
       SPRING_CLOUD_VAULT_SCHEME: http
       APP_PROVIDERS_BASE_URL: http://comm-fakecomworld:8080
       APP_FHIR_CALLBACK_BASE_URL: http://communicatiemodule:8080
+      SECUREPOST_USERNAME: securepost-client-id
+      SECUREPOST_PASSWORD: securepost-secret-key
+      ASYNCFLOW_API_KEY: asyncflow-api-key
+      LEGACYLINK_USERNAME: legacylink-user
+      LEGACYLINK_PASSWORD: legacylink-password
+      SWIFTSEND_API_KEY: your-api-key-here
     depends_on:
       comm-postgres:
         condition: service_healthy

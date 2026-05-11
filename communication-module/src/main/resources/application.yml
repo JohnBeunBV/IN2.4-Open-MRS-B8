@@ -49,18 +49,18 @@ app:
     base-url: http://localhost:1337
     swiftsend:
       path: /swiftsend
-      api-key: ${SWIFTSEND_API_KEY:dev-key-swiftsend}
+      api-key: ${SWIFTSEND_API_KEY:your-api-key-here}
     securepost:
       path: /securepost
-      username: ${SECUREPOST_USERNAME:dev-user}
-      password: ${SECUREPOST_PASSWORD:dev-pass}
+      username: ${SECUREPOST_USERNAME:securepost-client-id}
+      password: ${SECUREPOST_PASSWORD:securepost-secret-key}
     legacylink:
       path: /legacylink
-      username: ${LEGACYLINK_USERNAME:dev-user}
-      password: ${LEGACYLINK_PASSWORD:dev-pass}
+      username: ${LEGACYLINK_USERNAME:legacylink-user}
+      password: ${LEGACYLINK_PASSWORD:legacylink-password}
     asyncflow:
       path: /asyncflow
-      api-key: ${ASYNCFLOW_API_KEY:dev-key-asyncflow}
+      api-key: ${ASYNCFLOW_API_KEY:asyncflow-api-key}
       poll-interval-ms: 3000
       max-poll-attempts: 10
 
