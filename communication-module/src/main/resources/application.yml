@@ -104,6 +104,8 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true
+    tags:
+      application: communicatiemodule
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 logging:

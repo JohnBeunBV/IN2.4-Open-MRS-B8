@@ -143,9 +143,13 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+      - "15692:15692"
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_ENABLED_PLUGINS_FILE: /etc/rabbitmq/enabled_plugins
+    command: >-
+      sh -c "rabbitmq-plugins enable rabbitmq_prometheus && rabbitmq-server"
     volumes:
       - comm-rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
