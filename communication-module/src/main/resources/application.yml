@@ -39,10 +39,6 @@ spring:
         default-context: communicatiemodule
       fail-fast: false # Don't crash if Vault is unavailable in dev
 
-  # Disable Vault config import if running without Vault
-  config:
-    import: "optional:vault://"
-
 # ─── Application-specific settings ─────────────────────────────────────────
 app:
   providers:
@@ -122,10 +118,11 @@ spring:
   config:
     activate:
       on-profile: docker
+    import: "optional:vault://"
   datasource:
-    url: jdbc:postgresql://postgres:5432/communicatiemodule
+    url: jdbc:postgresql://comm-postgres:5432/communicatiemodule
   rabbitmq:
-    host: rabbitmq
+    host: comm-rabbitmq
   cloud:
     vault:
-      host: vault
+      host: comm-vault
