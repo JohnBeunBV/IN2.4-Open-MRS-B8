@@ -9,6 +9,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.UUID;
 
 /**
@@ -16,8 +18,9 @@ import java.util.UUID;
  *
  * Endpoint: POST /fhir/webhook/{organisationId}
  *
- * Authentication: Bearer token in Authorization header, validated per organisation.
- * TLS 1.3 is enforced at the reverse proxy / load balancer level.
+ * Global token: enforced upstream by WebhookTokenFilter.
+ * Per-org token: validated here with constant-time comparison.
+ * TLS 1.3 is enforced at the reverse proxy level.
  */
 @Slf4j
 @RestController
@@ -28,10 +31,6 @@ public class FhirWebhookController {
     private final FhirProcessorService fhirProcessorService;
     private final OrganisationConfigRepository organisationRepository;
 
-    /**
-     * Receive a FHIR Subscription notification.
-     * The organisation ID in the path ensures each hospital has its own endpoint.
-     */
     @PostMapping("/{organisationId}")
     public ResponseEntity<String> receive(
             @PathVariable UUID organisationId,
@@ -40,36 +39,40 @@ public class FhirWebhookController {
 
         log.debug("FHIR webhook received for org={}", organisationId);
 
-        // Authenticate: validate the Bearer token against the stored callback token
         OrganisationConfig org = organisationRepository.findById(organisationId).orElse(null);
         if (org == null || !org.isActive()) {
             log.warn("Webhook received for unknown/inactive org={}", organisationId);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Organisation not found");
         }
 
+        // Per-org constant-time token check (global token already verified by WebhookTokenFilter)
         if (!isValidToken(authHeader, org.getCallbackToken())) {
-            log.warn("Invalid Bearer token for org={}", organisationId);
+            log.warn("Invalid per-org Bearer token for org={}", organisationId);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
         }
 
         try {
             fhirProcessorService.processIncoming(organisationId, fhirPayload);
-            // HL7 FHIR: respond with 200 OK to acknowledge receipt (ACK)
             return ResponseEntity.ok("ACK");
         } catch (IllegalArgumentException ex) {
             log.error("Invalid FHIR payload from org={}: {}", organisationId, ex.getMessage());
-            // HL7 ACK: NAK - return 400 so OpenMRS knows to retry with a correct payload
+            // 400 NAK → OpenMRS knows payload is bad, no point retrying unchanged
             return ResponseEntity.badRequest().body("NAK: " + ex.getMessage());
         } catch (Exception ex) {
             log.error("Error processing FHIR webhook for org={}", organisationId, ex);
-            // Return 500 so the FHIR Subscription knows to retry
+            // 500 → OpenMRS will retry (transient error)
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Processing error");
         }
     }
 
+    /**
+     * Constant-time comparison to prevent timing-based token enumeration.
+     */
     private boolean isValidToken(String authHeader, String expectedToken) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) return false;
         String received = authHeader.substring(7).trim();
-        return received.equals(expectedToken);
+        byte[] receivedBytes = received.getBytes(StandardCharsets.UTF_8);
+        byte[] expectedBytes = expectedToken.getBytes(StandardCharsets.UTF_8);
+        return MessageDigest.isEqual(receivedBytes, expectedBytes);
     }
 }

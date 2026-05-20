@@ -1,83 +1,101 @@
 server:
   port: 8080
   ssl:
-    enabled: false # Enable in production with cert+key
+    enabled: false # TLS handled by reverse proxy; enable here only if terminating SSL on app level
 
 spring:
   application:
     name: communicatiemodule
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/communicatiemodule
-    username: commuser
-    password: commpass
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/communicatiemodule}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      # Explicit pool config (do not rely on Spring Boot defaults in production)
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+      pool-name: CommModulePool
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate   # 'update' is unsafe in production; use Flyway/Liquibase migrations
     show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
+        format_sql: false
 
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
 
   cloud:
     vault:
-      host: localhost
-      port: 8200
-      scheme: http
-      token: root-token
+      host: ${VAULT_HOST:localhost}
+      port: ${VAULT_PORT:8200}
+      scheme: ${VAULT_SCHEME:http}
+      # Token must be supplied via VAULT_TOKEN env var; 'root-token' is not acceptable in production
+      token: ${VAULT_TOKEN}
       kv:
         enabled: true
         default-context: communicatiemodule
-      fail-fast: false # Don't crash if Vault is unavailable in dev
+      # fail-fast is set per-profile; see application-prod.yml for production override
+      fail-fast: false
 
-  # Disable Vault config import if running without Vault
   config:
     import: "optional:vault://"
 
 # ─── Application-specific settings ─────────────────────────────────────────
 app:
   providers:
-    base-url: http://localhost:1337
+    base-url: ${PROVIDER_BASE_URL:http://localhost:1337}
     swiftsend:
       path: /swiftsend
-      api-key: ${SWIFTSEND_API_KEY:your-api-key-here}
+      api-key: ${SWIFTSEND_API_KEY}
     securepost:
       path: /securepost
-      username: ${SECUREPOST_USERNAME:securepost-client-id}
-      password: ${SECUREPOST_PASSWORD:securepost-secret-key}
+      username: ${SECUREPOST_USERNAME}
+      password: ${SECUREPOST_PASSWORD}
     legacylink:
       path: /legacylink
-      username: ${LEGACYLINK_USERNAME:legacylink-user}
-      password: ${LEGACYLINK_PASSWORD:legacylink-password}
+      username: ${LEGACYLINK_USERNAME}
+      password: ${LEGACYLINK_PASSWORD}
     asyncflow:
       path: /asyncflow
-      api-key: ${ASYNCFLOW_API_KEY:asyncflow-api-key}
+      api-key: ${ASYNCFLOW_API_KEY}
       poll-interval-ms: 3000
       max-poll-attempts: 10
 
   scheduling:
-    poll-interval-ms: 30000 # Check for due notifications every 30s
+    poll-interval-ms: 30000
     timezone-default: UTC
 
   fhir:
-    callback-base-url: ${FHIR_CALLBACK_BASE_URL:http://localhost:8080}
+    callback-base-url: ${FHIR_CALLBACK_BASE_URL}
     callback-path: /fhir/webhook
 
   security:
-    webhook-token: ${WEBHOOK_TOKEN:dev-webhook-secret}
+    webhook-token: ${WEBHOOK_TOKEN}
+    admin-password: ${ADMIN_PASSWORD}
+    max-webhook-body-bytes: ${MAX_WEBHOOK_BODY_BYTES:1048576}
+    # 32-byte Base64-encoded AES key for PII field encryption; generate with:
+    # openssl rand -base64 32
+    db-encryption-key: ${DB_ENCRYPTION_KEY}
 
   data-retention:
     patient-data-days: 14
     message-log-days: 365
+
+  startup-validation:
+    skip: false   # Override to true ONLY in test profiles
 
 # ─── RabbitMQ queues ─────────────────────────────────────────────────────────
 rabbitmq:
@@ -95,7 +113,7 @@ management:
         include: health,info,prometheus,metrics
   endpoint:
     health:
-      show-details: always
+      show-details: when-authorized   # hide details from unauthenticated callers
   prometheus:
     metrics:
       export:
@@ -108,14 +126,48 @@ management:
 # ─── Logging ─────────────────────────────────────────────────────────────────
 logging:
   level:
-    nl.avans.communicatiemodule: DEBUG
+    nl.avans.communicatiemodule: INFO   # DEBUG only in local/test profiles
     ca.uhn.fhir: WARN
     org.springframework.security: WARN
+    com.zaxxer.hikari: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
 ---
-# Docker profile overrides
+# ─── Local development profile ───────────────────────────────────────────────
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    username: commuser
+    password: commpass
+  rabbitmq:
+    username: guest
+    password: guest
+  cloud:
+    vault:
+      token: root-token
+      fail-fast: false
+  config:
+    import: "optional:vault://"
+
+app:
+  security:
+    webhook-token: local-dev-only-webhook-secret
+    admin-password: local-dev-only-admin
+    db-encryption-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=  # 32 zero-bytes, dev only
+  fhir:
+    callback-base-url: http://localhost:8080
+  startup-validation:
+    skip: true  # skip in local dev
+
+logging:
+  level:
+    nl.avans.communicatiemodule: DEBUG
+
+---
+# ─── Docker profile ──────────────────────────────────────────────────────────
 spring:
   config:
     activate:

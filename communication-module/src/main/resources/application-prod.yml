@@ -1,0 +1,33 @@
+# ─── Production profile ───────────────────────────────────────────────────────
+# Activate with: -Dspring.profiles.active=prod  (or SPRING_PROFILES_ACTIVE=prod)
+#
+# All secrets MUST be supplied via environment variables or Vault.
+# No fallback defaults are defined here.
+
+spring:
+  cloud:
+    vault:
+      # In production Vault MUST be reachable; crash on failure rather than
+      # silently running with missing secrets
+      fail-fast: true
+      scheme: https   # Vault must use TLS in production
+      token: ${VAULT_TOKEN}  # Injected by the container orchestrator (K8s secret / ECS task role)
+
+  jpa:
+    hibernate:
+      ddl-auto: validate   # Never allow Hibernate to auto-migrate in production
+
+management:
+  endpoint:
+    health:
+      show-details: when-authorized  # Only expose details to authenticated callers
+
+logging:
+  level:
+    nl.avans.communicatiemodule: INFO  # Never DEBUG in production
+    org.springframework.security: WARN
+    com.zaxxer.hikari: WARN
+
+app:
+  startup-validation:
+    skip: false   # Always validate in production
