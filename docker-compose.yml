@@ -87,6 +87,7 @@ services:
     ports:
       - "8090:8080"
     environment:
+
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://comm-postgres:5432/communicatiemodule
       SPRING_DATASOURCE_USERNAME: commuser
@@ -107,6 +108,12 @@ services:
       LEGACYLINK_USERNAME: legacylink-user
       LEGACYLINK_PASSWORD: legacylink-password
       SWIFTSEND_API_KEY: your-api-key-here
+      WEBHOOK_TOKEN: dev-webhook-secret
+      ADMIN_PASSWORD: admin
+      DB_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      SPRING_JPA_HIBERNATE_DDL_AUTO: create
+      APP_STARTUP_VALIDATION_SKIP: "true"
+
     depends_on:
       comm-postgres:
         condition: service_healthy

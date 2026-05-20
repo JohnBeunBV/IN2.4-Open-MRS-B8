@@ -12,6 +12,7 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.nio.charset.StandardCharsets;
 
 /**
  * JPA AttributeConverter that transparently encrypts/decrypts sensitive string fields
@@ -52,7 +53,7 @@ public class EncryptedStringConverter implements AttributeConverter<String, Stri
 
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             cipher.init(Cipher.ENCRYPT_MODE, secretKey, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
-            byte[] cipherText = cipher.doFinal(plaintext.getBytes("UTF-8"));
+            byte[] cipherText = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
 
             return Base64.getEncoder().encodeToString(iv)
                    + ":" + Base64.getEncoder().encodeToString(cipherText);
@@ -76,7 +77,7 @@ public class EncryptedStringConverter implements AttributeConverter<String, Stri
 
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             cipher.init(Cipher.DECRYPT_MODE, secretKey, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
-            return new String(cipher.doFinal(cipherText), "UTF-8");
+            return new String(cipher.doFinal(cipherText), StandardCharsets.UTF_8);
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to decrypt field value", ex);
         }
