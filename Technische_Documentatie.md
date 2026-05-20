@@ -6,25 +6,33 @@ Deze documentatie beschrijft de stappen voor OpenMRS-beheerders om de koppeling 
 
 1. **Credentials instellen**
    - Open het bestand `communication-module/src/main/resources/application.yml`.
-   - Vul de benodigde credentials in voor de koppeling, zoals gebruikersnaam, wachtwoord, en eventuele tokens.
+   - Vul de benodigde credentials in voor de koppeling, zoals gebruikersnaam, wachtwoord, en eventuele tokens. Provider-gegevens staan onder `app.providers`.
    - Voorbeeld:
      ```yaml
      spring:
        rabbitmq:
-         username: <gebruikersnaam>
-         password: <wachtwoord>
-         host: <rabbitmq-host>
-         port: <rabbitmq-port>
-     provider:
-       url: <openmrs-url>
-       username: <openmrs-gebruiker>
-       password: <openmrs-wachtwoord>
+         username: guest
+         password: guest
+         host: comm-rabbitmq
+         port: 5672
+     app:
+       providers:
+         base-url: http://localhost:1337
+         swiftsend:
+           api-key: ${SWIFTSEND_API_KEY:dev-key-swiftsend}
+         securepost:
+           username: ${SECUREPOST_USERNAME:dev-user}
+           password: ${SECUREPOST_PASSWORD:dev-pass}
+         legacylink:
+           username: ${LEGACYLINK_USERNAME:dev-user}
+           password: ${LEGACYLINK_PASSWORD:dev-pass}
      ```
    - Sla het bestand op.
 
 2. **Secrets beheren**
-   - Gebruik bij voorkeur omgevingsvariabelen of een secrets manager voor productieomgevingen.
-   - Zie eventueel de `vault/` directory voor scripts om secrets te initialiseren.
+
+- Gebruik bij voorkeur omgevingsvariabelen of een secrets manager voor productieomgevingen.
+- Zie de directory `communication-module/vault/` voor het script `vault-init.sh` om provider credentials in Vault te zetten.
 
 ## 2. Docker-opstartinstructie
 
@@ -42,7 +50,7 @@ Deze documentatie beschrijft de stappen voor OpenMRS-beheerders om de koppeling 
 2. **Controleer de logs**
    - Bekijk de logs van de communicatie-module met:
      ```sh
-     docker-compose logs -f communication-module
+     docker-compose logs -f communicatie-module
      ```
 
 ## 3. Voorbeeldrequest
@@ -50,8 +58,8 @@ Deze documentatie beschrijft de stappen voor OpenMRS-beheerders om de koppeling 
 Hieronder een voorbeeld van een POST-request naar de webhook endpoint van de communicatie-module:
 
 ```
-POST /webhook/fhir HTTP/1.1
-Host: <communicatie-module-host>
+POST /fhir/webhook/{organisationId} HTTP/1.1
+Host: <communicatiemodule-host>
 Content-Type: application/json
 Authorization: Bearer <token>
 
@@ -70,12 +78,12 @@ Authorization: Bearer <token>
 }
 ```
 
-- **Endpoint**: `/webhook/fhir` (zie `FhirWebhookController.java`)
-- **Authenticatie**: Bearer token of basis authenticatie, afhankelijk van de configuratie.
+- **Endpoint**: `/fhir/webhook/{organisationId}` (zie `FhirWebhookController.java`)
+- **Authenticatie**: Bearer token in de Authorization-header, gevalideerd per organisatie.
 - **Body**: FHIR-resource, bijvoorbeeld een Appointment.
 
 ## 4. Overige tips
 
 - Raadpleeg de README.md-bestanden in de submodules voor aanvullende informatie.
-- Controleer of alle afhankelijkheden (RabbitMQ, OpenMRS, etc.) bereikbaar zijn.
+- Controleer of alle afhankelijkheden (RabbitMQ, OpenMRS, database, Vault, etc.) bereikbaar zijn.
 - Voor monitoring en logging zijn extra configuraties beschikbaar in de `monitoring/` directory.
