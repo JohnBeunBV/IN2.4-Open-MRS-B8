@@ -44,7 +44,9 @@ spring:
       kv:
         enabled: true
         default-context: communicatiemodule
-      fail-fast: false
+
+# ─── Application-specific settings ─────────────────────────────────────────
+      fail-fast: false # Don't crash if Vault is unavailable in dev
   config:
     import: "optional:vault://"
 
@@ -121,6 +123,8 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true
+    tags:
+      application: communicatiemodule
 
 logging:
   level:
@@ -135,6 +139,7 @@ spring:
   config:
     activate:
       on-profile: docker
+    import: "optional:vault://"
   datasource:
     url: jdbc:postgresql://comm-postgres:5432/communicatiemodule
   rabbitmq:
