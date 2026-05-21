@@ -87,6 +87,7 @@ services:
     ports:
       - "8090:8080"
     environment:
+
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://comm-postgres:5432/communicatiemodule
       SPRING_DATASOURCE_USERNAME: commuser
@@ -101,12 +102,27 @@ services:
       SPRING_CLOUD_VAULT_SCHEME: http
       APP_PROVIDERS_BASE_URL: http://comm-fakecomworld:8080
       APP_FHIR_CALLBACK_BASE_URL: http://communicatiemodule:8080
+      # ── Poller: verbinding met OpenMRS via REST v1 ──────────────────────────
+      # De poller gebruikt POST /ws/rest/v1/appointment/search als fallback
+      # voor FHIR Subscriptions die niet werken in standaard OpenMRS O3.
+      APP_POLLER_ENABLED: "true"
+      APP_POLLER_INTERVAL_MS: "120000"
+      APP_POLLER_INITIAL_DELAY_MS: "30000"
+      # Standaard OpenMRS admin credentials (vervang in productie via Vault)
+      OPENMRS_API_USERNAME: "admin"
+      OPENMRS_API_PASSWORD: "Admin1234"
       SECUREPOST_USERNAME: securepost-client-id
       SECUREPOST_PASSWORD: securepost-secret-key
       ASYNCFLOW_API_KEY: asyncflow-api-key
       LEGACYLINK_USERNAME: legacylink-user
       LEGACYLINK_PASSWORD: legacylink-password
       SWIFTSEND_API_KEY: your-api-key-here
+      WEBHOOK_TOKEN: dev-webhook-secret
+      ADMIN_PASSWORD: admin
+      DB_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      SPRING_JPA_HIBERNATE_DDL_AUTO: create
+      APP_STARTUP_VALIDATION_SKIP: "true"
+
     depends_on:
       comm-postgres:
         condition: service_healthy

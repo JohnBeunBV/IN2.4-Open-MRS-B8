@@ -14,17 +14,13 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.List;
 
-/**
- * Registers FHIR Subscription resources on each active OpenMRS instance.
- * Runs once at startup and can be triggered manually via the admin API.
- *
- * The subscription tells OpenMRS: "when an Appointment changes, POST the resource
- * to our callback URL with a Bearer token for authentication."
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FhirSubscriptionService {
+
+    private static final int MAX_ATTEMPTS = 5;
+    private static final long INITIAL_BACKOFF_MS = 5_000L;
 
     private final FhirContext fhirContext;
     private final WebClient webClient;
@@ -40,12 +36,29 @@ public class FhirSubscriptionService {
     public void registerAllSubscriptions() {
         List<OrganisationConfig> activeOrgs = organisationRepository.findByActiveTrue();
         log.info("Registering FHIR Subscriptions for {} active organisations", activeOrgs.size());
-        activeOrgs.forEach(this::registerSubscription);
+        activeOrgs.forEach(this::registerWithRetry);
     }
 
-    /**
-     * Register (or re-register) the FHIR Subscription for a single organisation.
-     */
+    public void registerWithRetry(OrganisationConfig org) {
+        long backoff = INITIAL_BACKOFF_MS;
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                registerSubscription(org);
+                return;
+            } catch (Exception ex) {
+                if (attempt == MAX_ATTEMPTS) {
+                    log.error("FHIR Subscription registration failed after {} attempts for org={}: {}",
+                              MAX_ATTEMPTS, org.getName(), ex.getMessage());
+                } else {
+                    log.warn("Subscription registration attempt {}/{} failed for org={}, retrying in {}ms: {}",
+                             attempt, MAX_ATTEMPTS, org.getName(), backoff, ex.getMessage());
+                    try { Thread.sleep(backoff); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); return; }
+                    backoff = Math.min(backoff * 2, 60_000L);
+                }
+            }
+        }
+    }
+
     public void registerSubscription(OrganisationConfig org) {
         String callbackUrl = callbackBaseUrl + callbackPath + "/" + org.getId();
         Subscription subscription = buildSubscription(org, callbackUrl);
@@ -53,21 +66,16 @@ public class FhirSubscriptionService {
 
         log.info("Registering FHIR Subscription for org={} at {}", org.getName(), org.getOpenmrsBaseUrl());
 
-        try {
-            webClient.put()
-                    .uri(org.getOpenmrsBaseUrl() + "/ws/fhir2/R4/Subscription/comm-module-" + org.getId())
-                    .header("Content-Type", "application/fhir+json")
-                    .header("Authorization", "Bearer " + org.getCallbackToken())
-                    .bodyValue(payload)
-                    .retrieve()
-                    .toBodilessEntity()
-                    .block();
+        webClient.put()
+                .uri(org.getOpenmrsBaseUrl() + "/ws/fhir2/R4/Subscription/comm-module-" + org.getId())
+                .header("Content-Type", "application/fhir+json")
+                .header("Authorization", "Bearer " + org.getCallbackToken())
+                .bodyValue(payload)
+                .retrieve()
+                .toBodilessEntity()
+                .block();
 
-            log.info("FHIR Subscription registered for org={}", org.getName());
-        } catch (Exception ex) {
-            // Non-fatal: subscription registration may fail if OpenMRS is not yet reachable
-            log.warn("Could not register FHIR Subscription for org={}: {}", org.getName(), ex.getMessage());
-        }
+        log.info("FHIR Subscription registered for org={}", org.getName());
     }
 
     private Subscription buildSubscription(OrganisationConfig org, String callbackUrl) {
@@ -75,11 +83,8 @@ public class FhirSubscriptionService {
         sub.setId("comm-module-" + org.getId());
         sub.setStatus(Subscription.SubscriptionStatus.REQUESTED);
         sub.setReason("OpenMRS Communication Module appointment notifications");
-
-        // Criteria: notify on any Appointment resource change
         sub.setCriteria("Appointment?");
 
-        // Channel: REST Hook (webhook) over HTTPS with Bearer token
         Subscription.SubscriptionChannelComponent channel = new Subscription.SubscriptionChannelComponent();
         channel.setType(Subscription.SubscriptionChannelType.RESTHOOK);
         channel.setEndpoint(callbackUrl);

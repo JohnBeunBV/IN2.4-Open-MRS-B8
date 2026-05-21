@@ -38,8 +38,13 @@ public class OrganisationService {
         applyDto(config, dto);
         config = repository.save(config);
 
-        // Immediately register a FHIR Subscription on the OpenMRS instance
-        subscriptionService.registerSubscription(config);
+        try {
+            subscriptionService.registerSubscription(config);
+        } catch (Exception e) {
+            log.warn("FHIR subscription registratie mislukt voor org={}: {} (poller gebruikt als fallback)",
+                    config.getName(), e.getMessage());
+        }
+
         log.info("Organisation created: id={}, name={}", config.getId(), config.getName());
         return config;
     }
@@ -49,7 +54,14 @@ public class OrganisationService {
         OrganisationConfig config = findById(id);
         applyDto(config, dto);
         config = repository.save(config);
-        subscriptionService.registerSubscription(config);
+
+        try {
+            subscriptionService.registerSubscription(config);
+        } catch (Exception e) {
+            log.warn("FHIR subscription update mislukt voor org={}: {} (poller gebruikt als fallback)",
+                    config.getName(), e.getMessage());
+        }
+
         return config;
     }
 
@@ -64,6 +76,8 @@ public class OrganisationService {
     private void applyDto(OrganisationConfig config, OrganisationConfigDto dto) {
         config.setName(dto.getName());
         config.setOpenmrsBaseUrl(dto.getOpenmrsBaseUrl());
+        config.setOpenmrsUsername(dto.getOpenmrsUsername() != null ? dto.getOpenmrsUsername() : "admin");
+        config.setOpenmrsPassword(dto.getOpenmrsPassword() != null ? dto.getOpenmrsPassword() : "Admin1234");
         config.setProviderType(dto.getProviderType());
         config.setCallbackToken(dto.getCallbackToken());
         config.setTimezone(dto.getTimezone() != null ? dto.getTimezone() : "UTC");
