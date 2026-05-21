@@ -1,46 +1,43 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
-    username: sa
-    password: ""
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL
     driver-class-name: org.h2.Driver
+    username: sa
+    password:
   jpa:
     hibernate:
       ddl-auto: create-drop
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
+    database-platform: org.hibernate.dialect.H2Dialect
   rabbitmq:
     host: localhost
-    port: 5672
-    username: guest
-    password: guest
   cloud:
     vault:
       enabled: false
-      fail-fast: false
-      token: test-token
   config:
     import: ""
 
 app:
-  security:
-    webhook-token: test-webhook-token
-    admin-password: test-admin-password
-    db-encryption-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+  providers:
+    base-url: http://localhost:9999
+    swiftsend:
+      api-key: test-key
+    securepost:
+      username: test
+      password: test
+    legacylink:
+      username: test
+      password: test
+    asyncflow:
+      api-key: test-key
   fhir:
     callback-base-url: http://localhost:8080
     callback-path: /fhir/webhook
+  security:
+    webhook-token: test-token
+    admin-password: test-admin
   startup-validation:
     skip: true
 
-rabbitmq:
-  exchange: notification.exchange
-  queue: notification.queue
-  dead-letter-queue: notification.dlq
-  routing-key: notification.send
-  max-retries: 5
-
 logging:
   level:
-    nl.avans.communicatiemodule: DEBUG
+    nl.avans: DEBUG

@@ -1,8 +1,7 @@
 package nl.avans.communicatiemodule.config;
 
-import io.micrometer.core.instrument.MeterRegistry;
-import nl.avans.communicatiemodule.security.WebhookTokenFilter;
 import nl.avans.communicatiemodule.security.RequestSizeLimitFilter;
+import nl.avans.communicatiemodule.security.WebhookTokenFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -24,23 +23,16 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
 
-    /** Must be set via env var WEBHOOK_TOKEN; no dev-default in production. */
     @Value("${app.security.webhook-token}")
     private String webhookToken;
 
-    /** Must be set via env var ADMIN_PASSWORD; no dev-default in production. */
+    /** No default — must be set via ADMIN_PASSWORD env var. */
     @Value("${app.security.admin-password}")
     private String adminPassword;
 
-    /** Maximum request body size for the webhook endpoint (1 MB default). */
+    /** Max webhook body size in bytes (default 1 MB). */
     @Value("${app.security.max-webhook-body-bytes:1048576}")
     private int maxWebhookBodyBytes;
-
-    private final MeterRegistry meterRegistry;
-
-    public SecurityConfig(MeterRegistry meterRegistry) {
-        this.meterRegistry = meterRegistry;
-    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -48,11 +40,8 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Public: actuator health + Prometheus
                 .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
-                // FHIR webhook: token is enforced by WebhookTokenFilter before reaching here
                 .requestMatchers("/fhir/webhook/**").permitAll()
-                // Admin API requires ADMIN role
                 .requestMatchers("/api/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
@@ -64,20 +53,16 @@ public class SecurityConfig {
 
     @Bean
     public WebhookTokenFilter webhookTokenFilter() {
-        return new WebhookTokenFilter(webhookToken, meterRegistry);
+        return new WebhookTokenFilter(webhookToken);
     }
 
-    /**
-     * Enforce a maximum request-body size for the webhook endpoint
-     * to protect against oversized payload attacks.
-     */
     @Bean
     public FilterRegistrationBean<RequestSizeLimitFilter> requestSizeLimitFilter() {
-        FilterRegistrationBean<RequestSizeLimitFilter> registration = new FilterRegistrationBean<>();
-        registration.setFilter(new RequestSizeLimitFilter(maxWebhookBodyBytes));
-        registration.addUrlPatterns("/fhir/webhook/*");
-        registration.setOrder(1);
-        return registration;
+        FilterRegistrationBean<RequestSizeLimitFilter> reg = new FilterRegistrationBean<>();
+        reg.setFilter(new RequestSizeLimitFilter(maxWebhookBodyBytes));
+        reg.addUrlPatterns("/fhir/webhook/*");
+        reg.setOrder(1);
+        return reg;
     }
 
     @Bean

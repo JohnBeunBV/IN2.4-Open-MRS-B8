@@ -77,7 +77,7 @@ class SwiftSendAdapterTest {
             Instant.now().plusSeconds(86400),
             "Please arrive 10 minutes early.",
             "en",
-            "Europe/Amsterdam",
+            "Europe/Amsterdam"
             0
         );
     }

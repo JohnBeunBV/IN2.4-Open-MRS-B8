@@ -1,7 +1,5 @@
 package nl.avans.communicatiemodule.security;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,25 +9,16 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
-/**
- * Enforces a global webhook token on all /fhir/webhook/** requests.
- * Uses constant-time comparison to prevent timing attacks.
- * Per-org token validation is still done inside FhirWebhookController.
- */
 @Slf4j
 public class WebhookTokenFilter extends OncePerRequestFilter {
 
     private final byte[] expectedTokenBytes;
-    private final Counter authFailureCounter;
 
-    public WebhookTokenFilter(String globalWebhookToken, MeterRegistry meterRegistry) {
+    public WebhookTokenFilter(String globalWebhookToken) {
         this.expectedTokenBytes = globalWebhookToken.getBytes(StandardCharsets.UTF_8);
-        this.authFailureCounter = Counter.builder("webhook.auth.failures")
-                .description("Number of failed webhook authentication attempts")
-                .register(meterRegistry);
     }
 
     @Override
@@ -41,13 +30,11 @@ public class WebhookTokenFilter extends OncePerRequestFilter {
                   request.getMethod(), request.getRequestURI(), request.getRemoteAddr());
 
         String authHeader = request.getHeader("Authorization");
-        if (!isValidGlobalToken(authHeader)) {
-            authFailureCounter.increment();
-            log.warn("Webhook rejected - invalid or missing global token. remoteAddr={}",
-                     request.getRemoteAddr());
+        if (!isValidToken(authHeader)) {
+            log.warn("Webhook rejected — invalid or missing token. remoteAddr={}", request.getRemoteAddr());
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.getWriter().write("Unauthorized");
-            return;  // do NOT continue the filter chain
+            return;
         }
 
         filterChain.doFilter(request, response);
@@ -58,13 +45,10 @@ public class WebhookTokenFilter extends OncePerRequestFilter {
         return !request.getRequestURI().startsWith("/fhir/webhook");
     }
 
-    /**
-     * Constant-time comparison to prevent timing-based token enumeration.
-     */
-    private boolean isValidGlobalToken(String authHeader) {
+    /** Constant-time comparison prevents timing-based token enumeration. */
+    private boolean isValidToken(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) return false;
-        String received = authHeader.substring(7).trim();
-        byte[] receivedBytes = received.getBytes(StandardCharsets.UTF_8);
-        return MessageDigest.isEqual(receivedBytes, expectedTokenBytes);
+        byte[] received = authHeader.substring(7).trim().getBytes(StandardCharsets.UTF_8);
+        return MessageDigest.isEqual(received, expectedTokenBytes);
     }
 }

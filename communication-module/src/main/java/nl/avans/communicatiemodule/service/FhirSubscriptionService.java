@@ -9,23 +9,17 @@ import org.hl7.fhir.r4.model.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.List;
 
-/**
- * Registers FHIR Subscription resources on each active OpenMRS instance.
- * Runs asynchronously at startup with exponential backoff retry so a slow
- * OpenMRS start-up does not block the application or cause a startup failure.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FhirSubscriptionService {
 
-    private static final int MAX_REGISTRATION_ATTEMPTS = 5;
+    private static final int MAX_ATTEMPTS = 5;
     private static final long INITIAL_BACKOFF_MS = 5_000L;
 
     private final FhirContext fhirContext;
@@ -38,47 +32,33 @@ public class FhirSubscriptionService {
     @Value("${app.fhir.callback-path}")
     private String callbackPath;
 
-    /**
-     * Triggered after the application context is fully started.
-     * Runs in a separate thread so startup is not blocked.
-     */
-    @Async
     @EventListener(ApplicationReadyEvent.class)
     public void registerAllSubscriptions() {
         List<OrganisationConfig> activeOrgs = organisationRepository.findByActiveTrue();
         log.info("Registering FHIR Subscriptions for {} active organisations", activeOrgs.size());
-        activeOrgs.forEach(this::registerSubscriptionWithRetry);
+        activeOrgs.forEach(this::registerWithRetry);
     }
 
-    /**
-     * Attempt subscription registration with exponential backoff.
-     * Failures are non-fatal: the app continues operating; a manual re-trigger
-     * is possible via the admin API.
-     */
-    public void registerSubscriptionWithRetry(OrganisationConfig org) {
-        long backoffMs = INITIAL_BACKOFF_MS;
-        for (int attempt = 1; attempt <= MAX_REGISTRATION_ATTEMPTS; attempt++) {
+    public void registerWithRetry(OrganisationConfig org) {
+        long backoff = INITIAL_BACKOFF_MS;
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 registerSubscription(org);
-                return; // success
+                return;
             } catch (Exception ex) {
-                if (attempt == MAX_REGISTRATION_ATTEMPTS) {
-                    log.error("FHIR Subscription registration FAILED after {} attempts for org={}: {}",
-                              MAX_REGISTRATION_ATTEMPTS, org.getName(), ex.getMessage());
+                if (attempt == MAX_ATTEMPTS) {
+                    log.error("FHIR Subscription registration failed after {} attempts for org={}: {}",
+                              MAX_ATTEMPTS, org.getName(), ex.getMessage());
                 } else {
                     log.warn("Subscription registration attempt {}/{} failed for org={}, retrying in {}ms: {}",
-                             attempt, MAX_REGISTRATION_ATTEMPTS, org.getName(), backoffMs, ex.getMessage());
-                    sleep(backoffMs);
-                    backoffMs = Math.min(backoffMs * 2, 60_000L); // cap at 60s
+                             attempt, MAX_ATTEMPTS, org.getName(), backoff, ex.getMessage());
+                    try { Thread.sleep(backoff); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); return; }
+                    backoff = Math.min(backoff * 2, 60_000L);
                 }
             }
         }
     }
 
-    /**
-     * Register (or re-register) the FHIR Subscription for a single organisation.
-     * Throws on failure so the retry wrapper can handle it.
-     */
     public void registerSubscription(OrganisationConfig org) {
         String callbackUrl = callbackBaseUrl + callbackPath + "/" + org.getId();
         Subscription subscription = buildSubscription(org, callbackUrl);
@@ -95,7 +75,7 @@ public class FhirSubscriptionService {
                 .toBodilessEntity()
                 .block();
 
-        log.info("FHIR Subscription registered successfully for org={}", org.getName());
+        log.info("FHIR Subscription registered for org={}", org.getName());
     }
 
     private Subscription buildSubscription(OrganisationConfig org, String callbackUrl) {
@@ -113,9 +93,5 @@ public class FhirSubscriptionService {
         sub.setChannel(channel);
 
         return sub;
-    }
-
-    private void sleep(long ms) {
-        try { Thread.sleep(ms); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
     }
 }

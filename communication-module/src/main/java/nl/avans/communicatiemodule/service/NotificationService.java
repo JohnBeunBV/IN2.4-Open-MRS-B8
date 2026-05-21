@@ -24,22 +24,18 @@ public class NotificationService {
     private final OrganisationConfigRepository organisationRepository;
     private final NotificationProducer producer;
 
-    /** @return number of notifications dispatched */
     @Transactional
-    public int dispatchDue24hNotifications() {
+    public void dispatchDue24hNotifications() {
         List<AppointmentNotification> due = notificationRepository.findDue24hNotifications(Instant.now());
         log.debug("Found {} due 24h notifications", due.size());
         due.forEach(n -> dispatch(n, "REMINDER_24H"));
-        return due.size();
     }
 
-    /** @return number of notifications dispatched */
     @Transactional
-    public int dispatchDue1hNotifications() {
+    public void dispatchDue1hNotifications() {
         List<AppointmentNotification> due = notificationRepository.findDue1hNotifications(Instant.now());
         log.debug("Found {} due 1h notifications", due.size());
         due.forEach(n -> dispatch(n, "REMINDER_1H"));
-        return due.size();
     }
 
     private void dispatch(AppointmentNotification notification, String type) {
@@ -53,8 +49,11 @@ public class NotificationService {
 
         if (notification.getAppointmentStart().isBefore(Instant.now())) {
             log.info("Appointment {} already started, skipping notification", notification.getFhirAppointmentId());
-            if ("REMINDER_24H".equals(type)) notification.setSent24h(true);
-            else notification.setSent1h(true);
+            if ("REMINDER_24H".equals(type)) {
+                notification.setSent24h(true);
+            } else {
+                notification.setSent1h(true);
+            }
             updateStatus(notification);
             notificationRepository.save(notification);
             return;
@@ -80,7 +79,10 @@ public class NotificationService {
     }
 
     private void updateStatus(AppointmentNotification n) {
-        if (n.isSent24h() && n.isSent1h()) n.setStatus(NotificationStatus.COMPLETED);
-        else if (n.isSent24h()) n.setStatus(NotificationStatus.PARTIAL);
+        if (n.isSent24h() && n.isSent1h()) {
+            n.setStatus(NotificationStatus.COMPLETED);
+        } else if (n.isSent24h()) {
+            n.setStatus(NotificationStatus.PARTIAL);
+        }
     }
 }
