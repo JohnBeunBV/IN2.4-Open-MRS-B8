@@ -9,6 +9,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.UUID;
 
 /**
@@ -67,9 +69,11 @@ public class FhirWebhookController {
         }
     }
 
+    /** Constant-time comparison prevents timing-based token enumeration. */
     private boolean isValidToken(String authHeader, String expectedToken) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) return false;
-        String received = authHeader.substring(7).trim();
-        return received.equals(expectedToken);
+        byte[] received = authHeader.substring(7).trim().getBytes(StandardCharsets.UTF_8);
+        byte[] expected = expectedToken.getBytes(StandardCharsets.UTF_8);
+        return MessageDigest.isEqual(received, expected);
     }
 }

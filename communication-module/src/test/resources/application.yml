@@ -34,6 +34,9 @@ app:
     callback-path: /fhir/webhook
   security:
     webhook-token: test-token
+    admin-password: test-admin
+  startup-validation:
+    skip: true
 
 logging:
   level:

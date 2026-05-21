@@ -1,17 +1,24 @@
 server:
   port: 8080
   ssl:
-    enabled: false # Enable in production with cert+key
+    enabled: false
 
 spring:
   application:
     name: communicatiemodule
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/communicatiemodule
-    username: commuser
-    password: commpass
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/communicatiemodule}
+    username: ${DB_USERNAME:commuser}
+    password: ${DB_PASSWORD:commpass}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: CommModulePool
 
   jpa:
     hibernate:
@@ -20,33 +27,30 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
+        format_sql: false
 
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
 
   cloud:
     vault:
-      host: localhost
-      port: 8200
-      scheme: http
-      token: root-token
+      host: ${VAULT_HOST:localhost}
+      port: ${VAULT_PORT:8200}
+      scheme: ${VAULT_SCHEME:http}
+      token: ${VAULT_TOKEN:root-token}
       kv:
         enabled: true
         default-context: communicatiemodule
-      fail-fast: false # Don't crash if Vault is unavailable in dev
-
-  # Disable Vault config import if running without Vault
+      fail-fast: false
   config:
     import: "optional:vault://"
 
-# ─── Application-specific settings ─────────────────────────────────────────
 app:
   providers:
-    base-url: http://localhost:1337
+    base-url: ${APP_PROVIDERS_BASE_URL:http://localhost:1337}
     swiftsend:
       path: /swiftsend
       api-key: ${SWIFTSEND_API_KEY:your-api-key-here}
@@ -65,21 +69,35 @@ app:
       max-poll-attempts: 10
 
   scheduling:
-    poll-interval-ms: 30000 # Check for due notifications every 30s
+    poll-interval-ms: 30000
     timezone-default: UTC
+
+  # ── OpenMRS REST v1 Poller ─────────────────────────────────────────────────
+  # Schakel in als FHIR Subscriptions niet beschikbaar zijn in jouw OpenMRS versie.
+  # De poller haalt afspraken op via POST /ws/rest/v1/appointment/search
+  poller:
+    enabled: true                  # false = alleen FHIR webhooks gebruiken
+    interval-ms: 120000            # polling interval (2 minuten)
+    initial-delay-ms: 30000        # wacht 30s na opstarten
+    connect-timeout-seconds: 5
+    read-timeout-seconds: 10
 
   fhir:
     callback-base-url: ${FHIR_CALLBACK_BASE_URL:http://localhost:8080}
     callback-path: /fhir/webhook
 
   security:
-    webhook-token: ${WEBHOOK_TOKEN:dev-webhook-secret}
+    # No fallback defaults — must be set via environment variables
+    webhook-token: ${WEBHOOK_TOKEN}
+    admin-password: ${ADMIN_PASSWORD}
 
   data-retention:
     patient-data-days: 14
     message-log-days: 365
 
-# ─── RabbitMQ queues ─────────────────────────────────────────────────────────
+  startup-validation:
+    skip: false
+
 rabbitmq:
   exchange: notification.exchange
   queue: notification.queue
@@ -87,7 +105,6 @@ rabbitmq:
   routing-key: notification.send
   max-retries: 5
 
-# ─── Actuator / Prometheus ───────────────────────────────────────────────────
 management:
   endpoints:
     web:
@@ -95,7 +112,7 @@ management:
         include: health,info,prometheus,metrics
   endpoint:
     health:
-      show-details: always
+      show-details: when-authorized
   prometheus:
     metrics:
       export:
@@ -105,7 +122,6 @@ management:
       percentiles-histogram:
         http.server.requests: true
 
-# ─── Logging ─────────────────────────────────────────────────────────────────
 logging:
   level:
     nl.avans.communicatiemodule: DEBUG
@@ -115,15 +131,14 @@ logging:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
 ---
-# Docker profile overrides
 spring:
   config:
     activate:
       on-profile: docker
   datasource:
-    url: jdbc:postgresql://postgres:5432/communicatiemodule
+    url: jdbc:postgresql://comm-postgres:5432/communicatiemodule
   rabbitmq:
-    host: rabbitmq
+    host: comm-rabbitmq
   cloud:
     vault:
-      host: vault
+      host: comm-vault

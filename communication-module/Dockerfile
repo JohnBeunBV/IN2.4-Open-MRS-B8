@@ -1,8 +1,11 @@
 FROM eclipse-temurin:17-jdk-alpine AS builder
 WORKDIR /app
+RUN apk add --no-cache maven
 COPY pom.xml .
+RUN mvn dependency:go-offline -q
 COPY src ./src
-RUN apk add --no-cache maven && mvn package -DskipTests -Dmaven.test.skip=true -q
+RUN mvn package -DskipTests -Dmaven.test.skip=true -q
+
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 COPY --from=builder /app/target/communicatiemodule-*.jar app.jar

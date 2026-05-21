@@ -1,7 +1,9 @@
 package nl.avans.communicatiemodule.config;
 
+import nl.avans.communicatiemodule.security.RequestSizeLimitFilter;
 import nl.avans.communicatiemodule.security.WebhookTokenFilter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -24,8 +26,13 @@ public class SecurityConfig {
     @Value("${app.security.webhook-token}")
     private String webhookToken;
 
-    @Value("${app.security.admin-password:admin}")
+    /** No default — must be set via ADMIN_PASSWORD env var. */
+    @Value("${app.security.admin-password}")
     private String adminPassword;
+
+    /** Max webhook body size in bytes (default 1 MB). */
+    @Value("${app.security.max-webhook-body-bytes:1048576}")
+    private int maxWebhookBodyBytes;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -33,11 +40,8 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Public: actuator health + FHIR webhook
                 .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
-                // FHIR webhook uses custom Bearer token validated by filter
                 .requestMatchers("/fhir/webhook/**").permitAll()
-                // Admin API requires ADMIN role
                 .requestMatchers("/api/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
@@ -50,6 +54,15 @@ public class SecurityConfig {
     @Bean
     public WebhookTokenFilter webhookTokenFilter() {
         return new WebhookTokenFilter(webhookToken);
+    }
+
+    @Bean
+    public FilterRegistrationBean<RequestSizeLimitFilter> requestSizeLimitFilter() {
+        FilterRegistrationBean<RequestSizeLimitFilter> reg = new FilterRegistrationBean<>();
+        reg.setFilter(new RequestSizeLimitFilter(maxWebhookBodyBytes));
+        reg.addUrlPatterns("/fhir/webhook/*");
+        reg.setOrder(1);
+        return reg;
     }
 
     @Bean

@@ -28,6 +28,20 @@ public class OrganisationConfig {
     @Column(name = "openmrs_base_url", nullable = false)
     private String openmrsBaseUrl;
 
+    /**
+     * OpenMRS REST API gebruikersnaam voor de poller (Basic Auth).
+     * Standaard "admin". Sla dit op als Vault-referentie in productie.
+     */
+    @Column(name = "openmrs_username")
+    private String openmrsUsername = "admin";
+
+    /**
+     * OpenMRS REST API wachtwoord voor de poller (Basic Auth).
+     * Sla dit NOOIT op als plaintext in productie — gebruik Vault.
+     */
+    @Column(name = "openmrs_password")
+    private String openmrsPassword = "Admin1234";
+
     /** Which messaging provider this organisation uses */
     @Enumerated(EnumType.STRING)
     @Column(name = "provider_type", nullable = false)

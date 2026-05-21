@@ -1,0 +1,24 @@
+# Production profile: activate with SPRING_PROFILES_ACTIVE=prod
+# All secrets must come from environment variables or Vault — no fallbacks here.
+spring:
+  cloud:
+    vault:
+      fail-fast: true   # Crash on startup if Vault is unreachable in production
+      scheme: https
+
+  jpa:
+    hibernate:
+      ddl-auto: validate  # Never auto-migrate in production
+
+management:
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    nl.avans.communicatiemodule: INFO  # Never DEBUG in production
+
+app:
+  startup-validation:
+    skip: false
