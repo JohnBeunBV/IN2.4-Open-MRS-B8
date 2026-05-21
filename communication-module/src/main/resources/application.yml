@@ -147,9 +147,9 @@ spring:
     activate:
       on-profile: docker
   datasource:
-    url: jdbc:postgresql://postgres:5432/communicatiemodule
+    url: jdbc:postgresql://comm-postgres:5432/communicatiemodule
   rabbitmq:
-    host: rabbitmq
+    host: comm-rabbitmq
   cloud:
     vault:
-      host: vault
+      host: comm-vault

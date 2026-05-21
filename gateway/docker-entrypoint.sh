@@ -23,5 +23,9 @@ else
     cp /etc/nginx/conf-templates/default.conf.template /etc/nginx/templates/default.conf.template
 fi
 
-# Execute the original nginx entrypoint
-exec /docker-entrypoint.sh "$@"
+# Execute the original nginx entrypoint or run nginx directly
+if [ -f "/docker-entrypoint.sh" ]; then
+    exec /docker-entrypoint.sh "$@"
+else
+    exec nginx -g "daemon off;"
+fi

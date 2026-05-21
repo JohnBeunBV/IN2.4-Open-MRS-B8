@@ -9,7 +9,8 @@ COPY default-ssl.conf.template /etc/nginx/conf-templates/
 COPY docker-entrypoint.sh /usr/local/bin/
 COPY watch-certs.sh /usr/local/bin/
 
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/watch-certs.sh
+RUN sed -i 's/\r//' /usr/local/bin/docker-entrypoint.sh /usr/local/bin/watch-certs.sh && \
+    chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/watch-certs.sh
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
