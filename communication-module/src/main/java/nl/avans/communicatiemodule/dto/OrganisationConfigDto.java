@@ -14,6 +14,13 @@ public class OrganisationConfigDto {
     @NotBlank
     private String openmrsBaseUrl;
 
+    /**
+     * OpenMRS REST API credentials voor de poller.
+     * Sla in productie op via Vault; gebruik hier defaults voor dev/test.
+     */
+    private String openmrsUsername = "admin";
+    private String openmrsPassword = "Admin1234";
+
     @NotNull
     private ProviderType providerType;
 

@@ -64,6 +64,8 @@ public class OrganisationService {
     private void applyDto(OrganisationConfig config, OrganisationConfigDto dto) {
         config.setName(dto.getName());
         config.setOpenmrsBaseUrl(dto.getOpenmrsBaseUrl());
+        config.setOpenmrsUsername(dto.getOpenmrsUsername() != null ? dto.getOpenmrsUsername() : "admin");
+        config.setOpenmrsPassword(dto.getOpenmrsPassword() != null ? dto.getOpenmrsPassword() : "Admin1234");
         config.setProviderType(dto.getProviderType());
         config.setCallbackToken(dto.getCallbackToken());
         config.setTimezone(dto.getTimezone() != null ? dto.getTimezone() : "UTC");

@@ -72,6 +72,16 @@ app:
     poll-interval-ms: 30000
     timezone-default: UTC
 
+  # ── OpenMRS REST v1 Poller ─────────────────────────────────────────────────
+  # Schakel in als FHIR Subscriptions niet beschikbaar zijn in jouw OpenMRS versie.
+  # De poller haalt afspraken op via POST /ws/rest/v1/appointment/search
+  poller:
+    enabled: true                  # false = alleen FHIR webhooks gebruiken
+    interval-ms: 120000            # polling interval (2 minuten)
+    initial-delay-ms: 30000        # wacht 30s na opstarten
+    connect-timeout-seconds: 5
+    read-timeout-seconds: 10
+
   fhir:
     callback-base-url: ${FHIR_CALLBACK_BASE_URL:http://localhost:8080}
     callback-path: /fhir/webhook
