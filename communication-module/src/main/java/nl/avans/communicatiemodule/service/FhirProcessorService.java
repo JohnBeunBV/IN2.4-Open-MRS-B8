@@ -9,11 +9,13 @@ import nl.avans.communicatiemodule.domain.NotificationStatus;
 import nl.avans.communicatiemodule.domain.OrganisationConfig;
 import nl.avans.communicatiemodule.repository.AppointmentNotificationRepository;
 import nl.avans.communicatiemodule.repository.OrganisationConfigRepository;
+import nl.avans.communicatiemodule.security.EncryptionService;
 import org.hl7.fhir.r4.model.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
@@ -27,6 +29,7 @@ public class FhirProcessorService {
     private final FhirContext fhirContext;
     private final AppointmentNotificationRepository notificationRepository;
     private final OrganisationConfigRepository organisationRepository;
+    private final EncryptionService encryptionService;
 
     /**
      * Processes an incoming FHIR Bundle (Subscription notification) or raw Appointment JSON.
@@ -101,11 +104,51 @@ public class FhirProcessorService {
 
         notification.setFhirAppointmentId(fhirId);
         notification.setOrganisationId(organisationId);
-        notification.setAppointmentStart(appointmentStart);
-        notification.setAppointmentLocation(extractLocation(appointment));
-        notification.setAppointmentInstructions(extractInstructions(appointment));
-        notification.setPatientPhone(extractPhone(appointment));
-        notification.setPatientName(extractPatientName(appointment));
+
+        // Convert appointment start to UTC as LocalDateTime
+        LocalDateTime startUtc = LocalDateTime.ofInstant(appointmentStart, ZoneId.of("UTC"));
+        notification.setAppointmentStartUtc(startUtc);
+
+        // Extract and ENCRYPT patient contact
+        try {
+            String patientPhone = extractPhone(appointment);
+            String encryptedPhone = encryptionService.encrypt(patientPhone, 
+                    org.getVaultCredentialsPath() + "/patient-contact");
+            notification.setPatientContactEncrypted(encryptedPhone);
+        } catch (Exception e) {
+            log.error("Failed to encrypt patient contact: {}", e.getMessage());
+            return;
+        }
+
+        // Extract and ENCRYPT patient name
+        try {
+            String patientName = extractPatientName(appointment);
+            if (patientName != null) {
+                String encryptedName = encryptionService.encrypt(patientName,
+                        org.getVaultCredentialsPath() + "/patient-name");
+                notification.setPatientNameEncrypted(encryptedName);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to encrypt patient name: {}", e.getMessage());
+        }
+
+        // Extract and ENCRYPT appointment details (location + instructions)
+        try {
+            String location = extractLocation(appointment);
+            String instructions = extractInstructions(appointment);
+            ZoneId zone = safeZone(org.getTimezone());
+            
+            // Format appointment details with local timezone
+            String appointmentDetails = formatAppointmentDetails(
+                    appointmentStart, zone, location, instructions);
+            
+            String encryptedDetails = encryptionService.encrypt(appointmentDetails,
+                    org.getVaultCredentialsPath() + "/appointment-details");
+            notification.setAppointmentDetailsEncrypted(encryptedDetails);
+        } catch (Exception e) {
+            log.error("Failed to encrypt appointment details: {}", e.getMessage());
+            return;
+        }
 
         // Schedule notification times in org's timezone
         ZoneId zone = safeZone(org.getTimezone());
@@ -117,16 +160,42 @@ public class FhirProcessorService {
             notification.setSent24h(true);
         }
 
-        // 14-day GDPR expiry
-        notification.setExpiresAt(appointmentStart.plus(14, ChronoUnit.DAYS));
-
         if (notification.getStatus() == null || notification.getStatus() == NotificationStatus.FAILED) {
             notification.setStatus(NotificationStatus.PENDING);
         }
 
         notificationRepository.save(notification);
-        log.info("Appointment notification saved: fhirId={}, notify24h={}, notify1h={}",
+        log.info("Appointment notification saved (encrypted): fhirId={}, notify24h={}, notify1h={}",
                  fhirId, notification.getNotifyAt24h(), notification.getNotifyAt1h());
+    }
+
+    /**
+     * Format appointment details with local timezone for display.
+     * Example output: "15 juni 2025, 10:00-10:30 uur, Polikliniek B Kamer 12, Nuchter komen"
+     */
+    private String formatAppointmentDetails(Instant appointmentStart, ZoneId zone, 
+                                           String location, String instructions) {
+        LocalDateTime localTime = LocalDateTime.ofInstant(appointmentStart, zone);
+        StringBuilder sb = new StringBuilder();
+        sb.append(formatDateLocalized(localTime))
+                .append(", ")
+                .append(String.format("%02d:%02d uur", localTime.getHour(), localTime.getMinute()));
+        
+        if (location != null && !location.isBlank()) {
+            sb.append(", ").append(location);
+        }
+        if (instructions != null && !instructions.isBlank()) {
+            sb.append(", ").append(instructions);
+        }
+        
+        return sb.toString();
+    }
+
+    private String formatDateLocalized(LocalDateTime dateTime) {
+        // Basic Dutch date formatting: "15 juni 2025"
+        String[] months = {"januari", "februari", "maart", "april", "mei", "juni",
+                          "juli", "augustus", "september", "oktober", "november", "december"};
+        return dateTime.getDayOfMonth() + " " + months[dateTime.getMonthValue() - 1] + " " + dateTime.getYear();
     }
 
     private void cancelNotification(String fhirId) {

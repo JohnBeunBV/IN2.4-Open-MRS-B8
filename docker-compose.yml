@@ -5,21 +5,19 @@ services:
   # ═══════════════════════════════════════════════════════
  
   gateway:
-    image: openmrs/openmrs-reference-application-3-gateway:${TAG:-qa}
-    platform: linux/amd64
+    image: openmrs/openmrs-reference-application-3-gateway:3.5.0
     restart: "unless-stopped"
     depends_on:
       - frontend
       - backend
     ports:
-      - "80:80"
+      - "8080:80"
       - "5005:5005"
     networks:
       - app-network
  
   frontend:
-    image: openmrs/openmrs-reference-application-3-frontend:${TAG:-qa}
-    platform: linux/amd64
+    image: openmrs/openmrs-reference-application-3-frontend:3.5.0
     restart: "unless-stopped"
     environment:
       SPA_PATH: /openmrs/spa
@@ -35,8 +33,7 @@ services:
       - app-network
  
   backend:
-    image: openmrs/openmrs-reference-application-3-backend:${TAG:-qa}
-    platform: linux/amd64
+    image: openmrs/openmrs-reference-application-3-backend:3.5.0
     restart: "unless-stopped"
     depends_on:
       - db

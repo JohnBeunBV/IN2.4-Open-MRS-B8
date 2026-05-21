@@ -74,10 +74,36 @@ app:
 
   security:
     webhook-token: ${WEBHOOK_TOKEN:dev-webhook-secret}
+    # Encryption settings
+    encryption:
+      algorithm: AES/GCM/NoPadding
+      key-size: 256
+      iv-length: 12
+      tag-length: 128
+      # Master key path in Vault (per organisation: {vault-credentials-path}/master-key)
+      vault-key-path: "secret/communicatiemodule/keys/master-key"
 
   data-retention:
     patient-data-days: 14
     message-log-days: 365
+    # Purge schedules (cron expressions)
+    patient-data-purge-schedule: "0 2 * * *" # Daily at 2 AM
+    message-log-purge-schedule: "0 3 * * *" # Daily at 3 AM
+
+  # FHIR HL7 Compliance
+  fhir-compliance:
+    standard: "FHIR R4 (HL7)"
+    message-processing:
+      - "Receipt - Validate FHIR resources"
+      - "Validation - Verify schema compliance"
+      - "ACK - HTTP 200 for successful processing"
+      - "Transformation - Convert to provider format"
+      - "Queueing - RabbitMQ queue"
+      - "Retry - Exponential backoff"
+    supported-resources:
+      - "Appointment"
+      - "Patient"
+      - "Location"
 
 # ─── RabbitMQ queues ─────────────────────────────────────────────────────────
 rabbitmq:

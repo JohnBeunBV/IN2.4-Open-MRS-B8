@@ -16,7 +16,12 @@ public final class MessageTextBuilder {
 
     /**
      * Builds a human-readable SMS/WhatsApp notification text.
-     * Supports multi-charset: uses Unicode throughout.
+     * Supports multi-charset: uses Unicode throughout (UTF-8).
+     *
+     * Includes:
+     * - Patient name
+     * - Date, time and appointment details (location, instructions)
+     * - A unique cancellation link (requirement: patient can cancel via link)
      */
     public static String build(NotificationMessage msg) {
         ZoneId zone = safeZone(msg.getTimezone());
@@ -30,15 +35,16 @@ public final class MessageTextBuilder {
         sb.append("Dear ").append(recipientName).append(",\n\n");
         sb.append("This is a reminder of your appointment on ").append(formattedDate).append(".\n");
 
-        if (msg.getAppointmentLocation() != null && !msg.getAppointmentLocation().isBlank()) {
-            sb.append("Location: ").append(msg.getAppointmentLocation()).append("\n");
+        if (msg.getAppointmentDetails() != null && !msg.getAppointmentDetails().isBlank()) {
+            sb.append("Details: ").append(msg.getAppointmentDetails()).append("\n");
         }
 
-        if (msg.getAppointmentInstructions() != null && !msg.getAppointmentInstructions().isBlank()) {
-            sb.append("Instructions: ").append(msg.getAppointmentInstructions()).append("\n");
+        // Cancellation link — requirement: patient can cancel via link in message
+        if (msg.getCancellationUrl() != null && !msg.getCancellationUrl().isBlank()) {
+            sb.append("\nTo cancel your appointment, click the link below:\n");
+            sb.append(msg.getCancellationUrl()).append("\n");
         }
 
-        sb.append("\nTo cancel your appointment, please contact us.");
         return sb.toString();
     }
 
